@@ -1,0 +1,1 @@
+Simplified barrier polygons.
