@@ -1,0 +1,635 @@
+---
+title: "model_predictions"
+output: html_document
+---
+
+```{r setup}
+library(sf)
+library(tidyverse)
+library(sdmTMB)
+library(geoR)
+```
+
+# Read and manipulate data
+### Read in datasets
+
+```{r read in data}
+# Read in SFES data
+SFES <- readRDS("../Input_data/SFES_clean_080222.rds")
+```
+
+# Generate predictions on original data points
+
+### Striped Bass
+
+```{r}
+# Read in striped bass model
+mSTRBAS <- read_rds("../output_models/042022/mSTRBAS.rds")
+
+# Generate prediction on original data points
+pSTRBAS_SFES <- predict(mSTRBAS, newdata = SFES, return_tmb_object = TRUE)
+
+# Save prediction
+saveRDS(pSTRBAS_SFES, "../predictions/042022/pSTRBAS_SFES.rds")
+```
+
+### Delta Smelt
+
+```{r}
+# Read in Delta Smelt model
+mDELSME <- read_rds("../output_models/042022/mDELSME.rds")
+
+# Generate prediction on original data points
+pDELSME_SFES <- predict(mDELSME, newdata = SFES, return_tmb_object = TRUE)
+
+# Save prediction
+saveRDS(pDELSME_SFES, "../predictions/042022/pDELSME_SFES.rds")
+```
+
+### Longfin Smelt
+
+```{r}
+# Read in Longfin Smelt model
+mLONSME <- read_rds("../output_models/042022/mLONSME.rds")
+
+# Generate prediction on original data points
+pLONSME_SFES <- predict(mLONSME, newdata = SFES, return_tmb_object = TRUE)
+
+# Save prediction
+saveRDS(pLONSME_SFES, "../predictions/042022/pLONSME_SFES.rds")
+```
+
+### Threadfin Shad
+
+```{r}
+# Read in Threadfin Shad model
+mTHRSHA <- read_rds("../output_models/042022/mTHRSHA.rds")
+
+# Generate prediction on original data points
+pTHRSHA_SFES <- predict(mTHRSHA, newdata = SFES, return_tmb_object = TRUE)
+
+# Save prediction
+saveRDS(pTHRSHA_SFES, "../predictions/042022/pTHRSHA_SFES.rds")
+```
+
+### American Shad
+
+```{r}
+# Read in American Shad model
+mAMESHA <- read_rds("../output_models/042022/mAMESHA.rds")
+
+# Generate prediction on original data points
+pAMESHA_SFES <- predict(mAMESHA, newdata = SFES, return_tmb_object = TRUE)
+
+# Save prediction
+saveRDS(pAMESHA_SFES, "../predictions/042022/pAMESHA_SFES.rds")
+```
+
+# Read in and modify prediction grid for predicting estuary wide distributions
+
+```{r}
+# Read in slimmed prediction grid
+SFE_grid <- readRDS("../input_data/SFE_grid_yr_surv_031821.rds")
+
+# Make "Year" a numeric variable
+SFE_grid$Year <- as.numeric(SFE_grid$Year)
+
+# Create scaled_year column in prediction grid
+SFE_grid$scaled_year <- (SFE_grid$Year - mean(SFE_grid$Year)) / sd(SFE_grid$Year)
+
+# Create 'Month' dataframe
+Month <- tibble(Month = 1:12)
+
+# Join Month and grid dataframes
+t <- crossing(SFE_grid,Month)
+
+t_1 <- t %>% slice(1:10610208)
+t_2 <- t %>% slice(10610209:21220416)
+t_3 <- t %>% slice(21220417:31830624)
+t_4 <- t %>% slice(31830625:42440832)
+
+# Remove unnecessary objects to free up computing power
+rm(t)
+rm(SFE_grid)
+rm(pSTRBAS_SFES)
+rm(pDELSME_SFES)
+rm(pLONSME_SFES)
+rm(pAMESHA_SFES)
+rm(pTHRSHA_SFES)
+rm(Month)
+gc()
+
+```
+
+# Generate Predictions on a 500m x 500m grid of the estuary
+Predict in slices - limited by ram
+
+### Striped Bass Prediction
+
+```{r}
+# Generate predictions on slices
+pSTRBAS_1 <- predict(mSTRBAS, newdata = t_1)
+pSTRBAS_2 <- predict(mSTRBAS, newdata = t_2)
+pSTRBAS_3 <- predict(mSTRBAS, newdata = t_3)
+pSTRBAS_4 <- predict(mSTRBAS, newdata = t_4)
+
+# Combine sliced predictions into single dataframe
+pSTRBAS <- bind_rows(pSTRBAS_1,pSTRBAS_2,pSTRBAS_3,pSTRBAS_4)
+
+# Save grid predictions
+saveRDS(pSTRBAS, "../predictions/042022/pSTRBAS.rds")
+
+# Generate a grid of decadal mean estimates from 1980-2017
+pSTRBAS_mean <- pSTRBAS %>%
+  mutate(decade = case_when(Year %in% 1980:1989 ~ "1980s",
+                            Year %in% 1990:1999 ~ "1990s",
+                            Year %in% 2000:2009 ~ "2000s",
+                            Year %in% 2010:2017 ~ "2010s")) %>%
+  group_by(X,Y,decade) %>%
+  summarise(mean_est = mean(plogis(est)))
+
+# Save decadal mean grid predictions
+saveRDS(pSTRBAS_mean, "../predictions/042022/pSTRBAS_mean.rds")
+
+# Remove slice predictions to free up computing space
+rm(pSTRBAS_1)
+rm(pSTRBAS_2)
+rm(pSTRBAS_3)
+rm(pSTRBAS_4)
+rm(pSTRBAS)
+rm(pSTRBAS_mean)
+gc()
+```
+
+### Delta Smelt Prediction
+
+```{r}
+# Generate predictions on slices
+pDELSME_1 <- predict(mDELSME, newdata = t_1)
+pDELSME_2 <- predict(mDELSME, newdata = t_2)
+pDELSME_3 <- predict(mDELSME, newdata = t_3)
+pDELSME_4 <- predict(mDELSME, newdata = t_4)
+
+# Combine sliced predictions into single dataframe
+pDELSME <- bind_rows(pDELSME_1,pDELSME_2,pDELSME_3,pDELSME_4)
+
+# Save grid predictions
+saveRDS(pDELSME, "../predictions/042022/pDELSME.rds")
+
+# Generate a grid of decadal mean estimates from 1980-2017
+pDELSME_mean <- pDELSME %>%
+  mutate(decade = case_when(Year %in% 1980:1989 ~ "1980s",
+                            Year %in% 1990:1999 ~ "1990s",
+                            Year %in% 2000:2009 ~ "2000s",
+                            Year %in% 2010:2017 ~ "2010s")) %>%
+  group_by(X,Y,decade) %>%
+  summarise(mean_est = mean(plogis(est)))
+
+# Save decadal mean grid predictions
+saveRDS(pDELSME_mean, "../predictions/042022/pDELSME_mean.rds")
+
+# Remove slice predictions to free up computing space
+rm(pDELSME_1)
+rm(pDELSME_2)
+rm(pDELSME_3)
+rm(pDELSME_4)
+rm(pDELSME)
+rm(pDELSME_mean)
+gc()
+```
+
+### Longfin Smelt Prediction
+
+```{r}
+# Generate predictions on slices
+pLONSME_1 <- predict(mLONSME, newdata = t_1)
+pLONSME_2 <- predict(mLONSME, newdata = t_2)
+pLONSME_3 <- predict(mLONSME, newdata = t_3)
+pLONSME_4 <- predict(mLONSME, newdata = t_4)
+
+# Combine sliced predictions into single dataframe
+pLONSME <- bind_rows(pLONSME_1,pLONSME_2,pLONSME_3,pLONSME_4)
+
+# Save grid predictions
+saveRDS(pLONSME, "../predictions/042022/pLONSME.rds")
+
+# Generate a grid of decadal mean estimates from 1980-2017
+pLONSME_mean <- pLONSME %>%
+  mutate(decade = case_when(Year %in% 1980:1989 ~ "1980s",
+                            Year %in% 1990:1999 ~ "1990s",
+                            Year %in% 2000:2009 ~ "2000s",
+                            Year %in% 2010:2017 ~ "2010s")) %>%
+  group_by(X,Y,decade) %>%
+  summarise(mean_est = mean(plogis(est)))
+
+# Save decadal mean grid predictions
+saveRDS(pLONSME_mean, "../predictions/042022/pLONSME_mean.rds")
+
+# Remove slice predictions to free up computing space
+rm(pLONSME_1)
+rm(pLONSME_2)
+rm(pLONSME_3)
+rm(pLONSME_4)
+rm(pLONSME)
+rm(pLONSME_mean)
+gc()
+```
+
+### Threadfin Shad Prediction
+
+```{r}
+# Generate predictions on slices
+pTHRSHA_1 <- predict(mTHRSHA, newdata = t_1)
+pTHRSHA_2 <- predict(mTHRSHA, newdata = t_2)
+pTHRSHA_3 <- predict(mTHRSHA, newdata = t_3)
+pTHRSHA_4 <- predict(mTHRSHA, newdata = t_4)
+
+# Combine sliced predictions into single dataframe
+pTHRSHA <- bind_rows(pTHRSHA_1,pTHRSHA_2,pTHRSHA_3,pTHRSHA_4)
+
+# Save grid predictions
+saveRDS(pTHRSHA, "../predictions/042022/pTHRSHA.rds")
+
+# Generate a grid of decadal mean estimates from 1980-2017
+pTHRSHA_mean <- pTHRSHA %>%
+  mutate(decade = case_when(Year %in% 1980:1989 ~ "1980s",
+                            Year %in% 1990:1999 ~ "1990s",
+                            Year %in% 2000:2009 ~ "2000s",
+                            Year %in% 2010:2017 ~ "2010s")) %>%
+  group_by(X,Y,decade) %>%
+  summarise(mean_est = mean(plogis(est)))
+
+# Save decadal mean grid predictions
+saveRDS(pTHRSHA_mean, "../predictions/042022/pTHRSHA_mean.rds")
+
+# Remove slice predictions to free up computing space
+rm(pTHRSHA_1)
+rm(pTHRSHA_2)
+rm(pTHRSHA_3)
+rm(pTHRSHA_4)
+rm(pTHRSHA)
+gc()
+```
+
+### American Shad Prediction
+
+```{r}
+# Generate predictions on slices
+pAMESHA_1 <- predict(mAMESHA, newdata = t_1)
+pAMESHA_2 <- predict(mAMESHA, newdata = t_2)
+pAMESHA_3 <- predict(mAMESHA, newdata = t_3)
+pAMESHA_4 <- predict(mAMESHA, newdata = t_4)
+
+# Combine sliced predictions into single dataframe
+pAMESHA <- bind_rows(pAMESHA_1,pAMESHA_2,pAMESHA_3,pAMESHA_4)
+
+# Save grid predictions
+saveRDS(pAMESHA, "../predictions/042022/pAMESHA.rds")
+
+# Generate a grid of decadal mean estimates from 1980-2017
+pAMESHA_mean <- pAMESHA %>%
+  mutate(decade = case_when(Year %in% 1980:1989 ~ "1980s",
+                            Year %in% 1990:1999 ~ "1990s",
+                            Year %in% 2000:2009 ~ "2000s",
+                            Year %in% 2010:2017 ~ "2010s")) %>%
+  group_by(X,Y,decade) %>%
+  summarise(mean_est = mean(plogis(est)))
+
+# Save decadal mean grid predictions
+saveRDS(pAMESHA_mean, "../predictions/042022/pAMESHA_mean.rds")
+
+# Remove slice predictions to free up computing space
+rm(pAMESHA_1)
+rm(pAMESHA_2)
+rm(pAMESHA_3)
+rm(pAMESHA_4)
+rm(pAMESHA)
+gc()
+```
+
+# Join the prediction dataframes together for plotting overall abundance trends
+The resulting dataframe is far too large to apply a ggplot gam smoother if prediction grids include all month and survey predictions. To deal with it, I take the mean estimate for each spatial point (X,Y) per year and then bind the individual dataframes together for plotting.
+
+```{r}
+# Read in prediction grids
+pSTRBAS <- readRDS("../predictions/042022/pSTRBAS.rds")
+pDELSME <- readRDS("../predictions/042022/pDELSME.rds")
+pLONSME <- readRDS("../predictions/042022/pLONSME.rds")
+pTHRSHA <- readRDS("../predictions/042022/pTHRSHA.rds")
+pAMESHA <- readRDS("../predictions/042022/pAMESHA.rds")
+
+# Take the yearly mean for each spatial point estimate
+pSTRBAS_slim <- pSTRBAS %>%
+  group_by(X,Y,Year) %>%
+  summarize(est = mean(est))
+pDELSME_slim <- pDELSME %>%
+  group_by(X,Y,Year) %>%
+  summarize(est = mean(est))
+pLONSME_slim <- pLONSME %>%
+  group_by(X,Y,Year) %>%
+  summarize(est = mean(est))
+pTHRSHA_slim <- pTHRSHA %>%
+  group_by(X,Y,Year) %>%
+  summarize(est = mean(est))
+pAMESHA_slim <- pAMESHA %>%
+  group_by(X,Y,Year) %>%
+  summarize(est = mean(est))
+
+# Add species column to each prediction
+pSTRBAS_slim$species <- "STRBAS"
+pDELSME_slim$species <- "DELSME"
+pLONSME_slim$species <- "LONSME"
+pTHRSHA_slim$species <- "THRSHA"
+pAMESHA_slim$species <- "AMESHA"
+
+# Bind the prediction grids together
+pred_all_species <- bind_rows(pSTRBAS_slim,pDELSME_slim,pLONSME_slim,pTHRSHA_slim,pAMESHA_slim)
+
+# Save all_species prediction grid
+saveRDS(pred_all_species, "../predictions/042022/pred_all_species.rds")
+```
+
+# Generate prediction simulations for representing uncertainty of spatial slope estimates
+
+Using 200 simulations - bootstrapping!
+
+### First modify prediction grid for simulations
+
+```{r}
+# Read back in full prediction grid
+t <- bind_rows(t_1,t_2,t_3,t_4)
+
+# Remove sliced grid pieces
+rm(t_1,t_2,t_3,t_4)
+gc()
+
+# Filter prediction grid to a single year since it should be the same slope prediction for every year
+t_pred <- t %>% filter(Year == 2017)
+```
+
+### Striped Bass simulations
+
+```{r}
+# Read in model output
+mSTRBAS <- readRDS("../output_models/042022/mSTRBAS.rds")
+
+# Generate prediction simulation of zeta_s (spatial slope) 
+pSTRBAS_sim <- predict(mSTRBAS, newdata = t_pred, sims = 200, sims_var = "zeta_s")
+
+# Save prediction simulation
+saveRDS(pSTRBAS_sim, "../predictions/042022/pSTRBAS_sim.rds")
+
+# Read in prediction simulation and full prediction grid
+pSTRBAS_sim <- readRDS("../predictions/042022/pSTRBAS_sim.rds")
+pSTRBAS <- readRDS("../predictions/042022/pSTRBAS.rds")
+
+# Filter prediction to just 2017
+pSTRBAS_2017 <- pSTRBAS %>% filter(Year == 2017)
+
+# Calculate summary statistics from simulation output
+pSTRBAS_2017$median <- apply((pSTRBAS_sim), 1, median)
+pSTRBAS_2017$lwr <- apply((pSTRBAS_sim), 1, quantile, probs = 0.025)
+pSTRBAS_2017$upr <- apply((pSTRBAS_sim), 1, quantile, probs = 0.975)
+pSTRBAS_2017$mean <- round(apply((pSTRBAS_sim), 1, mean),2)
+pSTRBAS_2017$sd <- round(apply((pSTRBAS_sim), 1, sd),2)
+pSTRBAS_2017$cv <- pSTRBAS_2017$sd/(pSTRBAS_2017$mean)
+
+# Save prediction grid with newly added summary statistics
+saveRDS(pSTRBAS_2017, "../predictions/042022/pSTRBAS_ss.rds")
+
+# Remove predictions to free up ram
+rm(pSTRBAS)
+rm(pSTRBAS_2017)
+rm(pSTRBAS_sim)
+rm(mSTRBAS)
+rm(t)
+gc()
+```
+
+### Delta Smelt simulations
+
+```{r}
+# Read in model output
+mDELSME <- readRDS("../output_models/042022/mDELSME.rds")
+
+# Generate prediction simulation of zeta_s (spatial slope) 
+pDELSME_sim <- predict(mDELSME, newdata = t_pred, sims = 200, sims_var = "zeta_s")
+
+# Save prediction simulation
+saveRDS(pDELSME_sim, "../predictions/042022/pDELSME_sim.rds")
+
+# Read in prediction simulation and full prediction grid
+pDELSME_sim <- readRDS("../predictions/042022/pDELSME_sim.rds")
+pDELSME <- readRDS("../predictions/042022/pDELSME.rds")
+
+# Filter prediction to just 2017
+pDELSME_2017 <- pDELSME %>% filter(Year == 2017)
+
+# Calculate summary statistics from simulation output
+pDELSME_2017$median <- apply((pDELSME_sim), 1, median)
+pDELSME_2017$lwr <- apply((pDELSME_sim), 1, quantile, probs = 0.025)
+pDELSME_2017$upr <- apply((pDELSME_sim), 1, quantile, probs = 0.975)
+pDELSME_2017$mean <- round(apply((pDELSME_sim), 1, mean),2)
+pDELSME_2017$sd <- round(apply((pDELSME_sim), 1, sd),2)
+pDELSME_2017$cv <- pDELSME_2017$sd/(pDELSME_2017$mean)
+
+# Save prediction grid with newly added summary statistics
+saveRDS(pDELSME_2017, "../predictions/042022/pDELSME_ss.rds")
+
+# Remove predictions to free up ram
+rm(pDELSME)
+rm(pDELSME_2017)
+rm(pDELSME_sim)
+rm(mDELSME)
+gc()
+```
+
+### Longfin Smelt simulations
+
+```{r}
+# Read in model output
+mLONSME <- readRDS("../output_models/042022/mLONSME.rds")
+
+# Generate prediction simulation of zeta_s (spatial slope) 
+pLONSME_sim <- predict(mLONSME, newdata = t_pred, sims = 200, sims_var = "zeta_s")
+
+# Save prediction simulation
+saveRDS(pLONSME_sim, "../predictions/042022/pLONSME_sim.rds")
+
+# Read in prediction simulation and full prediction grid
+pLONSME_sim <- readRDS("../predictions/042022/pLONSME_sim.rds")
+pLONSME <- readRDS("../predictions/042022/pLONSME.rds")
+
+# Filter prediction to just 2017
+pLONSME_2017 <- pLONSME %>% filter(Year == 2017)
+
+# Calculate summary statistics from simulation output
+pLONSME_2017$median <- apply((pLONSME_sim), 1, median)
+pLONSME_2017$lwr <- apply((pLONSME_sim), 1, quantile, probs = 0.025)
+pLONSME_2017$upr <- apply((pLONSME_sim), 1, quantile, probs = 0.975)
+pLONSME_2017$mean <- round(apply((pLONSME_sim), 1, mean),2)
+pLONSME_2017$sd <- round(apply((pLONSME_sim), 1, sd),2)
+pLONSME_2017$cv <- pLONSME_2017$sd/(pLONSME_2017$mean)
+
+# Save prediction grid with newly added summary statistics
+saveRDS(pLONSME_2017, "../predictions/042022/pLONSME_ss.rds")
+
+# Remove predictions to free up ram
+rm(pLONSME)
+rm(pLONSME_2017)
+rm(pLONSME_sim)
+rm(mLONSME)
+gc()
+```
+
+### Threadfin Shad simulations
+
+```{r}
+# Read in model output
+mTHRSHA <- readRDS("../output_models/042022/mTHRSHA.rds")
+
+# Generate prediction simulation of zeta_s (spatial slope) 
+pTHRSHA_sim <- predict(mTHRSHA, newdata = t_pred, sims = 200, sims_var = "zeta_s")
+
+# Save prediction simulation
+saveRDS(pTHRSHA_sim, "../predictions/042022/pTHRSHA_sim.rds")
+
+# Read in prediction simulation and full prediction grid
+pTHRSHA_sim <- readRDS("../predictions/042022/pTHRSHA_sim.rds")
+pTHRSHA <- readRDS("../predictions/042022/pTHRSHA.rds")
+
+# Filter prediction to just 2017
+pTHRSHA_2017 <- pTHRSHA %>% filter(Year == 2017)
+
+# Calculate summary statistics from simulation output
+pTHRSHA_2017$median <- apply((pTHRSHA_sim), 1, median)
+pTHRSHA_2017$lwr <- apply((pTHRSHA_sim), 1, quantile, probs = 0.025)
+pTHRSHA_2017$upr <- apply((pTHRSHA_sim), 1, quantile, probs = 0.975)
+pTHRSHA_2017$mean <- round(apply((pTHRSHA_sim), 1, mean),2)
+pTHRSHA_2017$sd <- round(apply((pTHRSHA_sim), 1, sd),2)
+pTHRSHA_2017$cv <- pTHRSHA_2017$sd/(pTHRSHA_2017$mean)
+
+# Save prediction grid with newly added summary statistics
+saveRDS(pTHRSHA_2017, "../predictions/042022/pTHRSHA_ss.rds")
+
+# Remove predictions to free up ram
+rm(pTHRSHA)
+rm(pTHRSHA_2017)
+rm(pTHRSHA_sim)
+rm(mTHRSHA)
+gc()
+```
+
+### American Shad simulations
+
+```{r}
+# Read in model output
+mAMESHA <- readRDS("../output_models/042022/mAMESHA.rds")
+
+# Generate prediction simulation of zeta_s (spatial slope) 
+pAMESHA_sim <- predict(mAMESHA, newdata = t_pred, sims = 200, sims_var = "zeta_s")
+
+# Save prediction simulation
+saveRDS(pAMESHA_sim, "../predictions/042022/pAMESHA_sim.rds")
+
+# Read in prediction simulation and full prediction grid
+pAMESHA_sim <- readRDS("../predictions/042022/pAMESHA_sim.rds")
+pAMESHA <- readRDS("../predictions/042022/pAMESHA.rds")
+
+# Filter prediction to just 2017
+pAMESHA_2017 <- pAMESHA %>% filter(Year == 2017)
+
+# Calculate summary statistics from simulation output
+pAMESHA_2017$median <- apply((pAMESHA_sim), 1, median)
+pAMESHA_2017$lwr <- apply((pAMESHA_sim), 1, quantile, probs = 0.025)
+pAMESHA_2017$upr <- apply((pAMESHA_sim), 1, quantile, probs = 0.975)
+pAMESHA_2017$mean <- round(apply((pAMESHA_sim), 1, mean),2)
+pAMESHA_2017$sd <- round(apply((pAMESHA_sim), 1, sd),2)
+pAMESHA_2017$cv <- pAMESHA_2017$sd/(pAMESHA_2017$mean)
+
+# Save prediction grid with newly added summary statistics
+saveRDS(pAMESHA_2017, "../predictions/042022/pAMESHA_ss.rds")
+
+# Remove predictions to free up ram
+rm(pAMESHA)
+rm(pAMESHA_2017)
+rm(pAMESHA_sim)
+rm(mAMESHA)
+gc()
+```
+
+### Generate center of gravity predicitons
+
+```{r}
+# Read in predictions on SFES survey points
+pSTRBAS_SFES <- readRDS("../predictions/042022/pSTRBAS_SFES.rds")
+pDELSME_SFES <- readRDS("../predictions/042022/pDELSME_SFES.rds")
+pLONSME_SFES <- readRDS("../predictions/042022/pLONSME_SFES.rds")
+pTHRSHA_SFES <- readRDS("../predictions/042022/pTHRSHA_SFES.rds")
+pAMESHA_SFES <- readRDS("../predictions/042022/pAMESHA_SFES.rds")
+
+# Striped Bass
+cog_STRBAS <- get_cog(pSTRBAS_SFES, level = 0.95)
+
+# Delta Smelt
+cog_DELSME <- get_cog(pDELSME_SFES, level = 0.95)
+
+# Longfin Smelt
+cog_LONSME <- get_cog(pLONSME_SFES, level = 0.95)
+
+# Threadfin Shad
+cog_THRSHA <- get_cog(pTHRSHA_SFES, level = 0.95)
+
+# American Shad
+cog_AMESHA <- get_cog(pAMESHA_SFES, level = 0.95)
+
+# Save center of gravity dataframes
+saveRDS(cog_STRBAS, "../COG/042022/cog_STRBAS.rds")
+saveRDS(cog_DELSME, "../COG/042022/cog_DELSME.rds")
+saveRDS(cog_LONSME, "../COG/042022/cog_LONSME.rds")
+saveRDS(cog_THRSHA, "../COG/042022/cog_THRSHA.rds")
+saveRDS(cog_AMESHA, "../COG/042022/cog_AMESHA.rds")
+```
+
+### Generate COG GAM and join to outflow dataframe for plotting
+
+Generate a simple GAM for showing trends in COG plus effects of outflow
+
+```{r}
+# Read in required packages
+library(mgcv)
+library(tidymv)
+
+# Read in outflow data. Sourced from DWR dayflow
+outflow <- readRDS("../Input_data/outflow_annual.RDS")
+
+# Filter outflow to the years we model
+outflow_trim <- outflow %>%
+  filter(Year %in% 1980:2017)
+
+# Join Outflow data to center of gravity predictions, add variance column for GAM modeling (weights arg)
+cog_of <- full_join(cog,outflow_trim) %>%
+  mutate(species = as.factor(species), var = (sd)^2)
+
+# Run a GAM of estimated COG predicted by smooth year and outflow by species, plus species as a linear fixed effect
+mCOG <- mgcv::gam(data = cog_of, est ~ s(Year, by = species) + s(outflow_maf, by = species) + species, weights = var)
+
+# Summarize model results
+summary(mCOG)
+
+# Save model
+saveRDS(mCOG, file = "../COG/042022/mCOG.rds")
+
+# Generate predicted smooth fit and standard error of COG on cog_of dataframe
+pCOG <- as.data.frame(mgcv::predict.gam(mCOG, newdata = cog_of, se.fit = T))
+
+# Add ID column for joining GAM fit and cog_of dataframes
+cog_of$ID <- c(1:190)
+pCOG$ID <- c(1:190)
+
+# Join the pCOG and cog_of dataframes together for plotting
+cog_fit <- full_join(cog_of,pCOG, by = "ID")
+
+# Save fit of COG dataframe
+saveRDS(cog_fit, file = "../COG/042022/cog_fit.rds")
+```

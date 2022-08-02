@@ -1,0 +1,356 @@
+---
+title: "model_building"
+author: "Dylan K Stompe"
+date: "03/02/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup}
+library(sf)
+library(tidyverse)
+library(sdmTMB)
+library(geoR)
+library(DHARMa)
+```
+
+# Read and manipulate data prior to analysis
+### Read in datasets
+
+```{r read in data}
+# Read in SFES data
+SFES <- readRDS("../Input_data/SFES_111621.rds")
+```
+
+### Clean up the source data a little bit
+
+```{r data cleanup}
+# Change 'survey' to a factor variable
+SFES$Survey <- as.factor(SFES$Survey)
+
+# Filter out upstream Sac River sites
+### Too distant to be meaningfull in model construction
+SR_filter <- c("SR060E","AM001S","SR049E","SR043W","SR144W","SR138E","SR130E","SR119E","SR094E","SR090W","SR080E","FW1")
+SFES <- SFES %>%
+  filter(!Station %in% SR_filter)
+
+# Make 'Month' a numeric variable for model construction
+SFES$Month <- as.numeric(SFES$Month)
+
+# Set up a column for time that is Normal(0,1) to help with estimation
+# This is required for modeling trends - i.e. slope
+SFES$scaled_year <- (SFES$Year - mean(SFES$Year)) / sd(SFES$Year)
+```
+
+### Start cleaning up and projecting spatial data
+
+```{r project spatial data}
+# Set projection - UTM zone 10N
+crs_utm10 <- 32610
+
+# Project survey data coordinates (crs = 4326 corresponds to WGS84)
+
+SFES_proj <- SFES %>% select(Longitude, Latitude) %>% #SFES df
+  st_as_sf(crs = 4326, coords = c("Longitude", "Latitude")) %>%
+  st_transform(crs_utm10)
+
+# Extract station UTM coordinates:
+
+SFES_utm_coords <- st_coordinates(SFES_proj)
+
+# Append UTM coordinates to dataframe - scale coordinates to km so the range parameter is on a reasonable scale for estimation:
+
+SFES$X <- SFES_utm_coords[,1] / 1000 
+SFES$Y <- SFES_utm_coords[,2] / 1000 
+
+# Save cleaned up SFES file
+# saveRDS(SFES, "../input_data/SFES_clean_080222.rds", compress = TRUE)
+```
+
+### Generate spatial meshes
+Knot cutoff distance set to 2km to minimize overfitting in heavily sampled portions of the estuary.
+Cutoff iteratively determined based on model fit.
+
+```{r generate mesh}
+# Generate a mesh
+spde_SFES <- make_mesh(SFES, xy_cols = c("X", "Y"),
+                       type = "cutoff",
+                       cutoff = 2) # Cutoff distance of 2km
+
+# Inspect mesh
+plot(spde_SFES)
+
+# Save mesh for later plotting
+saveRDS(spde_SFES, "../input_data/spde_SFES.rds")
+```
+
+### Read in barrier polygon and constrain spatial mesh
+
+```{r add barrier to mesh}
+# Read in barrier polygon
+SFE_polygon_ubersimple <- st_read("../input_data/SFE_Barrier_ubersimple1/SFE_Barrier_ubersimple1.shp")
+
+# Add UTM projection using st_transform
+SFE_polygon_ubersimple <- st_transform(SFE_polygon_ubersimple, crs_utm10)
+
+# Add on the barrier mesh component:
+bspde_SFES <- add_barrier_mesh(
+  spde_SFES, SFE_polygon_ubersimple, proj_scaling = 1000, range_fraction = .1,
+  plot = TRUE)
+
+# Save and read in bspde_SFES for faster setup before model building
+#saveRDS(bspde_SFES, "../input_data/bspde_SFES.rds")
+ bspde_SFES <- readRDS("../input_data/bspde_SFES.rds")
+```
+
+# 8-Survey (SFES) Dataset Analysis
+
+The following code analyzes the spatial variation in density using the 8-survey index dataset. This dataset includes 8 long-term surveys, from 1980 to 2017, and only includes continuously sampled stations. 
+
+### Remove clutter to assist with computational efficiency
+
+```{r}
+rm(spde_SFES)
+rm(SFES_proj)
+rm(SFES_utm_coords)
+gc()
+```
+
+### Build models with SFES dataset 
+
+Model species distribution using multiple intercepts, spatial random effects, and Survey as a fixed effect. Binomial distribution with a logit-link function used to remove scaling error due to differential capture efficiency. Modeling presence distills fixed effect of Survey to a single dimension.
+
+### Build striped bass models
+
+```{r build STRBAS models}
+## Striped Bass distribution model
+
+# Add a column of 0/1 (no catch/catch)
+
+SFES$STRBAS_bin <- ifelse(SFES$STRBAS > 0, 1, 0)
+
+# Striped bass model 
+# survey, smoothed month, and scaled_year as predictor variables 
+# binomial distribution with logit link function applied
+
+ mSTRBAS <- sdmTMB(STRBAS_bin ~ Survey + s(Month, bs="cr"),
+                   data = SFES,
+                   mesh = bspde_SFES, 
+                   family = binomial(link = "logit"),
+                   spatial = "on",
+                   spatiotemporal = "IID",
+                   time = "Year",
+                   spatial_varying = ~ 0 + scaled_year,
+                   silent = FALSE)
+ 
+mSTRBAS <- run_extra_optimization(mSTRBAS) # Converged 4/20/22
+ 
+ saveRDS(mSTRBAS, "../output_models/042022/mSTRBAS.rds")
+
+mSTRBAS <- readRDS("../output_models/042022/mSTRBAS.rds")
+```
+
+### Build Delta smelt models
+
+```{r build DELSME models}
+## Delta Smelt distribution model
+
+# Add a column of 0/1 (no catch/catch)
+
+SFES$DELSME_bin <- ifelse(SFES$DELSME > 0, 1, 0)
+
+# Delta Smelt model 
+# survey, smoothed month, and scaled_year as predictor variables 
+# binomial distribution with logit link function applied
+
+mDELSME <- sdmTMB(DELSME_bin ~ Survey + s(Month, bs = "cr"), # Converged 4/20/22
+                   data = SFES,
+                   mesh = bspde_SFES, 
+                   family = binomial(link = "logit"),
+                   spatial = "on",
+                   spatiotemporal = "IID",
+                   time = "Year",
+                   spatial_varying = ~ 0 + scaled_year,
+                   silent = FALSE)
+
+saveRDS(mDELSME, "../output_models/042022/mDELSME.rds")
+
+mDELSME <- readRDS("../output_models/042022/mDELSME.rds")
+```
+
+### Build Longfin smelt models
+
+```{r build LONSME models}
+## Longfin Smelt distribution model
+
+# Add a column of 0/1 (no catch/catch)
+
+SFES$LONSME_bin <- ifelse(SFES$LONSME > 0, 1, 0)
+
+# Longfin Smelt model 
+# survey, smoothed month, and scaled_year as predictor variables 
+# binomial distribution with logit link function applied
+
+mLONSME <- sdmTMB(LONSME_bin ~ Survey + s(Month, bs="cr"),
+                   data = SFES,
+                   mesh = bspde_SFES, 
+                   family = binomial(link = "logit"),
+                   spatial = "on",
+                   spatiotemporal = "IID",
+                   time = "Year",
+                   spatial_varying = ~ 0 + scaled_year,
+                   silent = FALSE)
+
+mLONSME <- run_extra_optimization(mLONSME) # Converged on 4/20/22
+
+ saveRDS(mLONSME, "../output_models/042022/mLONSME.rds")
+
+mLONSME <- readRDS("../output_models/042022/mLONSME.rds")
+```
+
+### Build Threadfin Shad models
+
+```{r build THRSHA models}
+## Threadfin Shad distribution model
+
+# Add a column of 0/1 (no catch/catch)
+
+SFES$THRSHA_bin <- ifelse(SFES$THRSHA > 0, 1, 0)
+
+# Threadfin Shad model 
+# survey, smoothed month, and scaled_year as predictor variables 
+# binomial distribution with logit link function applied
+
+ mTHRSHA <- sdmTMB(THRSHA_bin ~ Survey + s(Month, bs="cr"), # Converged on 4/20/22
+                   data = SFES,
+                   mesh = bspde_SFES, 
+                   family = binomial(link = "logit"),
+                   spatial = "on",
+                   spatiotemporal = "IID",
+                   time = "Year",
+                   spatial_varying = ~ 0 + scaled_year,
+                   silent = FALSE)
+
+ saveRDS(mTHRSHA, "../output_models/042022/mTHRSHA.rds")
+
+mTHRSHA <- readRDS("../output_models/032522/mTHRSHA.rds")
+```
+
+### Build American Shad models
+
+```{r build AMESHA models}
+## American Shad distribution model
+
+# Add a column of 0/1 (no catch/catch)
+
+SFES$AMESHA_bin <- ifelse(SFES$AMESHA > 0, 1, 0)
+
+# American Shad model 
+# survey, smoothed month, and scaled_year as predictor variables 
+# binomial distribution with logit link function applied
+
+ mAMESHA <- sdmTMB(AMESHA_bin ~ Survey + s(Month, bs="cr"), # Converged 4/20/22
+                   data = SFES,
+                   mesh = bspde_SFES, 
+                   family = binomial(link = "logit"),
+                   spatial = "on",
+                   spatiotemporal = "IID",
+                   time = "Year",
+                   spatial_varying = ~ 0 + scaled_year,
+                   silent = FALSE)
+
+ saveRDS(mAMESHA, "../output_models/042022/mAMESHA.rds")
+
+mAMESHA <- readRDS("../output_models/042022/mAMESHA.rds")
+```
+
+### Check model fit
+Checking the model fit through simulation based residual sampling
+
+```{r check model residuals fit}
+
+# Striped Bass
+
+pred_fixed_STRBAS <- mSTRBAS$family$linkinv(predict(mSTRBAS)$est_non_rf)
+
+s_STRBAS <- simulate(mSTRBAS, nsim = 500)
+
+STRBAS_test <- DHARMa::createDHARMa(
+  simulatedResponse = s_STRBAS,
+  observedResponse = SFES$STRBAS_bin,
+  fittedPredictedResponse = pred_fixed_STRBAS
+)
+
+testResiduals(STRBAS_test)
+
+saveRDS(STRBAS_test, "../model_diagnostics/050222/STRBAS_test.rds")
+
+# Delta Smelt
+
+pred_fixed_DELSME <- mDELSME$family$linkinv(predict(mDELSME)$est_non_rf)
+
+s_DELSME <- simulate(mDELSME, nsim = 500)
+
+DELSME_test <- DHARMa::createDHARMa(
+  simulatedResponse = s_DELSME,
+  observedResponse = SFES$DELSME_bin,
+  fittedPredictedResponse = pred_fixed_DELSME
+)
+
+testResiduals(DELSME_test)
+
+saveRDS(DELSME_test, "../model_diagnostics/050222/DELSME_test.rds")
+
+# Longfin Smelt
+
+pred_fixed_LONSME <- mLONSME$family$linkinv(predict(mLONSME)$est_non_rf)
+
+s_LONSME <- simulate(mLONSME, nsim = 500)
+
+LONSME_test <- DHARMa::createDHARMa(
+  simulatedResponse = s_LONSME,
+  observedResponse = SFES$LONSME_bin,
+  fittedPredictedResponse = pred_fixed_LONSME
+)
+
+testResiduals(LONSME_test)
+
+saveRDS(LONSME_test, "../model_diagnostics/050222/LONSME_test.rds")
+
+# Threadfin Shad
+
+pred_fixed_THRSHA <- mTHRSHA$family$linkinv(predict(mTHRSHA)$est_non_rf)
+
+s_THRSHA <- simulate(mTHRSHA, nsim = 500)
+
+THRSHA_test <- DHARMa::createDHARMa(
+  simulatedResponse = s_THRSHA,
+  observedResponse = SFES$THRSHA_bin,
+  fittedPredictedResponse = pred_fixed_THRSHA
+)
+
+testResiduals(THRSHA_test)
+
+saveRDS(THRSHA_test, "../model_diagnostics/050222/THRSHA_test.rds")
+
+# American Shad
+
+pred_fixed_AMESHA <- mAMESHA$family$linkinv(predict(mAMESHA)$est_non_rf)
+
+s_AMESHA <- simulate(mAMESHA, nsim = 500)
+
+AMESHA_test <- DHARMa::createDHARMa(
+  simulatedResponse = s_AMESHA,
+  observedResponse = SFES$AMESHA_bin,
+  fittedPredictedResponse = pred_fixed_AMESHA
+)
+
+testResiduals(AMESHA_test)
+testDispersion(AMESHA_test)
+
+
+saveRDS(AMESHA_test, "../model_diagnostics/050222/AMESHA_test.rds")
+```
+
+The qqplots of residuals look good. The tests show significant deviation in some of the outlier/dispersion tests, however, the actual fits and number of outliers are not concerning. This is probably because there are so many data points.

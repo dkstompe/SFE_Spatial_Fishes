@@ -1,0 +1,908 @@
+---
+title: "paper_figures"
+author: "Dylan K. Stompe"
+date: "3/18/2022"
+output: html_document
+---
+
+```{r setup}
+library(sf)
+library(tidyverse)
+library(geoR)
+library(ggpubr)
+```
+
+# Read in water-year, outflow data, and SFE polygon data
+
+```{r}
+# Read in water year type. Sourced from: https://cdec.water.ca.gov/reportapp/javareports?name=WSIHIST
+wy <- read_csv("../Input_data/water_year.csv")
+
+# Read in outflow data. Sourced from DWR dayflow
+outflow <- readRDS("../Input_data/outflow_annual.RDS")
+
+# Read in SFE Polygon data
+SFE_polygon_ubersimple <- st_read("../input_data/SFE_Barrier_ubersimple1/SFE_Barrier_ubersimple1.shp")
+
+# Set projection - UTM zone 10N
+crs_utm10 <- 32610
+
+# Add UTM projection using st_transform
+SFE_polygon_ubersimple <- st_transform(SFE_polygon_ubersimple, crs_utm10)
+```
+
+# Figure 1
+
+Figure of barrier mesh with land/water mesh vertices (knots) shown
+bspde = barrier stochastic partial differential equation
+
+```{r}
+# Read in barrier spatial mesh
+bspde_SFES <- readRDS("../input_data/bspde_SFES.rds")
+
+# Print the total number of knots, knots in water, and knots on land
+bspde_SFES$mesh$n # total number of knots
+
+# Pull out centers of normal (water) and barrier (land) triangles
+mesh_df_water <- bspde_SFES$mesh_sf[bspde_SFES$normal_triangles, ] # mesh triangles without restricted spatial correlation
+mesh_df_land <- bspde_SFES$mesh_sf[bspde_SFES$barrier_triangles, ] # mesh triangles with restricted spatial correlation (range = 0.1)
+
+# Generate a plot of the barrier mesh and mesh triangles:
+barrier_plot <- ggplot(SFE_polygon_ubersimple) +
+  theme_classic() +
+  geom_sf() +
+  geom_sf(data = mesh_df_water, size = 1, colour = "blue") +
+  geom_sf(data = mesh_df_land, size = 1, colour = "green") +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ylab("Latitude") +
+  xlab("Longitude")
+
+barrier_plot
+
+# Save the figure
+ggsave(plot = barrier_plot, filename = "../Figures/042022/barrier_plot.png")
+```
+
+
+# Figure 2a
+
+Striped Bass mean estimates of prob. of detection by decade
+
+```{r}
+# Read in mean prediction grids
+pSTRBAS_mean <- readRDS("../predictions/042022/pSTRBAS_mean.rds")
+
+# Striped Bass mean estimate of prob of detection by decade
+STRBAS_est <- pSTRBAS_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.80)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ggtitle("Striped Bass") +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade)
+
+STRBAS_est
+
+ggsave("../Figures/042022/STRBAS_est.png", width = 8, height = 4, dpi = 600)
+```
+
+# Figure 2b
+
+Delta Smelt mean estimates of prob. of detection by decade
+
+```{r}
+# Read in mean prediction grids
+pDELSME_mean <- readRDS("../predictions/032822/pDELSME_mean.rds")
+
+# Delta smelt mean estimate of prob of detection by decade
+DELSME_est <- pDELSME_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.8)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ggtitle("Delta Smelt") +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade)
+
+DELSME_est
+
+ggsave("../Figures/032822/DELSME_est.png", width = 8, height = 4, dpi = 600)
+```
+
+# Figure 2c
+
+Longfin smelt mean estimates of prob. of detection by decade
+
+```{r}
+# Read in mean prediction grids
+pLONSME_mean <- readRDS("../predictions/032822/pLONSME_mean.rds")
+
+# Longfin smelt mean estimate of prob of detection by decade
+LONSME_est <- pLONSME_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.2, 0.50)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ggtitle("Longfin Smelt") +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade)
+
+LONSME_est
+
+ggsave("../Figures/032822/LONSME_est.png", width = 8, height = 4, dpi = 600)
+```
+
+# Figure 2d
+
+Threadfin Shad mean estimates of prob. of detection by decade
+
+```{r}
+# Read in mean prediction grids
+pTHRSHA_mean <- readRDS("../predictions/032822/pTHRSHA_mean.rds")
+
+# Threadfin shad mean estimate of prob of detection by decade
+THRSHA_est <- pTHRSHA_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.75)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ggtitle("Threadfin Shad") +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade)
+
+THRSHA_est
+
+ggsave("../Figures/032822/THRSHA_est.png", width = 8, height = 4, dpi = 600)
+```
+
+# Figure 2f
+
+American Shad mean estimates of prob. of detection by decade
+
+```{r}
+# Read in mean prediction grids
+pAMESHA_mean <- readRDS("../predictions/032822/pAMESHA_mean.rds")
+
+# American shad mean estimate of prob of detection by decade
+AMESHA_est <- pAMESHA_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.20, 0.50)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  ggtitle("American Shad") +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade)
+
+AMESHA_est
+
+ggsave("../Figures/032822/AMESHA_est.png", width = 8, height = 4, dpi = 600)
+```
+
+# Figure 2
+
+Generate all decade facet plots then save
+
+```{r}
+# Read in mean prediction grids
+pSTRBAS_mean <- readRDS("../predictions/042022/pSTRBAS_mean.rds")
+pDELSME_mean <- readRDS("../predictions/042022/pDELSME_mean.rds")
+pLONSME_mean <- readRDS("../predictions/042022/pLONSME_mean.rds")
+pTHRSHA_mean <- readRDS("../predictions/042022/pTHRSHA_mean.rds")
+pAMESHA_mean <- readRDS("../predictions/042022/pAMESHA_mean.rds")
+
+
+#STRBAS
+STRBAS_est <- pSTRBAS_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.80)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank())
+
+#DELSME
+DELSME_est <- pDELSME_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.8)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank())
+
+#LONSME
+LONSME_est <- pLONSME_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.2, 0.50)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank())
+
+#THRSHA
+THRSHA_est <- pTHRSHA_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.30, 0.75)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank())
+
+#AMESHA
+AMESHA_est <- pAMESHA_mean %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=mean_est)) +
+  scale_fill_viridis_c(name = "Probability of Detection", option = "magma", trans = "sqrt", breaks = c(0.05, 0.20, 0.50)) +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.17,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_text(size = 8, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.17, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6, hjust = 0.5),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90'),
+        plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("") +
+  facet_grid(~decade) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank())
+
+# Aligning not working well with ggarrange so save them separately then put them together in post
+ggsave("../Figures/042022/STRBAS_est.png", plot = STRBAS_est, width = 8, height = 4, dpi = 600)
+ggsave("../Figures/042022/DELSME_est.png", plot = DELSME_est, width = 8, height = 4, dpi = 600)
+ggsave("../Figures/042022/LONSME_est.png", plot = LONSME_est, width = 8, height = 4, dpi = 600)
+ggsave("../Figures/042022/THRSHA_est.png", plot = THRSHA_est, width = 8, height = 4, dpi = 600)
+ggsave("../Figures/042022/AMESHA_est.png", plot = AMESHA_est, width = 8, height = 4, dpi = 600)
+```
+
+# Figure 3
+
+Save the species component plots then hack them all together in powerpoint #peakcoding
+
+### Striped Bass components - 3a
+
+```{r}
+# Read in Striped Bass predictions
+pSTRBAS_2017 <- readRDS("../predictions/042022/pSTRBAS_ss.rds")
+
+# Striped Bass slope
+STRBAS_slope <- pSTRBAS_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=zeta_s)) +
+  scale_fill_gradient2(
+  low = "red",
+  mid = "white",
+  high = "blue",
+  midpoint = 0,
+  limits = c(-2,2),
+  name = "Spatial Slope") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+
+#STRBAS_slope
+
+# Striped Bass slope standard deviation
+STRBAS_sd <- pSTRBAS_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=sd)) +
+  scale_fill_viridis_c(name = "Spatial Slope SD") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+  
+#STRBAS_sd
+
+# Arrange plots side by side
+STRBAS_slope_plot <- ggarrange(STRBAS_slope,STRBAS_sd,nrow = 1,ncol = 2,align = c("hv"))
+
+# Save STRBAS plot component
+ggsave("../Figures/042022/STRBAS_slope.png", plot = STRBAS_slope_plot, dpi = 500, width = 6.5, height = 4)
+```
+
+### Delta Smelt components - 3b
+
+Figure of spatial slope value as well as standard deviation and overall estimate for Delta Smelt
+
+```{r}
+# Read in Delta Smelt predictions
+pDELSME_2017 <- readRDS("../predictions/042022/pDELSME_ss.rds")
+
+# Delta smelt slope
+DELSME_slope <- pDELSME_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=zeta_s)) +
+  scale_fill_gradient2(
+  low = "red",
+  mid = "white",
+  high = "blue",
+  midpoint = 0,
+  limits = c(-2,2),
+  name = "Spatial Slope") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+
+#DELSME_slope
+
+# Delta smelt slope standard deviation
+DELSME_sd <- pDELSME_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=sd)) +
+  scale_fill_viridis_c(name = "Spatial Slope SD") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+  
+#DELSME_sd
+
+# Arrange plots side by side
+DELSME_slope_plot <- ggarrange(DELSME_slope,DELSME_sd,nrow = 1,ncol = 2,align = c("hv"))
+
+# Save DELSME plot component
+ggsave("../Figures/042022/DELSME_slope.png", plot = DELSME_slope_plot, dpi = 500, width = 6.5, height = 4)
+```
+
+### Longfin Smelt Components - 3c
+
+```{r}
+# Read in Longfin Smelt predictions
+pLONSME_2017 <- readRDS("../predictions/042022/pLONSME_ss.rds")
+
+# Longfin Smelt slope
+LONSME_slope <- pLONSME_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=zeta_s)) +
+  scale_fill_gradient2(
+  low = "red",
+  mid = "white",
+  high = "blue",
+  midpoint = 0,
+  limits = c(-2,2),
+  name = "Spatial Slope") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+
+#LONSME_slope
+
+# Longfin Smelt slope standard deviation
+LONSME_sd <- pLONSME_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=sd)) +
+  scale_fill_viridis_c(name = "Spatial Slope SD") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+  
+#LONSME_sd
+
+# Arrange plots side by side
+LONSME_slope_plot <- ggarrange(LONSME_slope,LONSME_sd,nrow = 1,ncol = 2,align = c("hv"))
+
+# Save LONSME plot component
+ggsave("../Figures/042022/LONSME_slope.png", plot = LONSME_slope_plot, dpi = 500, width = 6.5, height = 4)
+```
+
+### Threadfin Shad Components - 3d
+
+```{r}
+# Read in Threadfin Shad predictions
+pTHRSHA_2017 <- readRDS("../predictions/042022/pTHRSHA_ss.rds")
+
+# Threadfin Shad slope
+THRSHA_slope <- pTHRSHA_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=zeta_s)) +
+  scale_fill_gradient2(
+  low = "red",
+  mid = "white",
+  high = "blue",
+  midpoint = 0,
+  limits = c(-2,2),
+  name = "Spatial Slope") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+
+#THRSHA_slope
+
+# Threadfin Shad slope standard deviation
+THRSHA_sd <- pTHRSHA_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=sd)) +
+  scale_fill_viridis_c(name = "Spatial Slope SD") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+  
+#THRSHA_sd
+
+# Arrange plots side by side
+THRSHA_slope_plot <- ggarrange(THRSHA_slope,THRSHA_sd,nrow = 1,ncol = 2,align = c("hv"))
+
+# Save THRSHA plot component
+ggsave("../Figures/042022/THRSHA_slope.png", plot = THRSHA_slope_plot, dpi = 500, width = 6.5, height = 4)
+```
+
+### American Shad Components - 3e
+
+```{r}
+# Read in American Shad predictions
+pAMESHA_2017 <- readRDS("../predictions/042022/pAMESHA_ss.rds")
+
+# American Shad slope
+AMESHA_slope <- pAMESHA_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=zeta_s)) +
+  scale_fill_gradient2(
+  low = "red",
+  mid = "white",
+  high = "blue",
+  midpoint = 0,
+  limits = c(-2,2),
+  name = "Spatial Slope") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_text(size = 8, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+
+#AMESHA_slope
+
+# American Shad slope standard deviation
+AMESHA_sd <- pAMESHA_2017 %>%
+  ggplot() +
+  geom_raster(aes(X*1000,Y*1000,fill=sd)) +
+  scale_fill_viridis_c(name = "Spatial Slope SD") +
+  theme_classic2() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) +
+  theme(legend.position = c(0.72,0.2),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 8, angle = 45, vjust = 0.5, hjust = 0.5),
+        legend.key.width = unit(.2, "in"),
+        legend.key.height = unit (.15, "in"),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.background = element_rect(fill = "grey90", color = NA),
+        panel.background = element_rect(fill = 'grey90')) +
+  guides(fill = guide_colourbar(title.position="top", title.hjust = 0.5)) +
+  xlab("") +
+  ylab("")
+  
+#AMESHA_sd
+
+# Arrange plots side by side
+AMESHA_slope_plot <- ggarrange(AMESHA_slope,AMESHA_sd,nrow = 1,ncol = 2,align = c("hv"))
+
+# Save AMESHA plot component
+ggsave("../Figures/042022/AMESHA_slope.png", plot = AMESHA_slope_plot, dpi = 500, width = 6.5, height = 4)
+```
+
+# Figure 4
+
+Plot of the overall trends in probability of detection at SFES survey points. Estimates are still in logit space so need to transform (plogis) for probability of detection.
+
+```{r}
+# Read in prediction grid
+pred_all_species <- readRDS("../predictions/042022/pred_all_species.rds")
+
+# Generate plot
+overall_trend <- pred_all_species %>%
+  ggplot(aes(x=Year,y=plogis(est),color=species,linetype=species)) +
+  geom_smooth() +
+  theme_bw() +
+  ylab("Probability of Detection") +
+  scale_color_discrete(labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad"), name = "Species") +
+  scale_linetype_discrete(labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad"), name = "Species") +
+  theme(legend.position = "top") #+
+  coord_trans(y = "sqrt")
+
+overall_trend
+
+# Save plot
+ggsave("../Figures/051622/overall_trend.png", plot = overall_trend, height = 7, width = 7, dpi = 600)
+```
+
+# Figure 5
+
+### Center of gravity plots
+Keep in mind these were generated using predictions on SFES survey points because computer could not handle predictions over the entire 500x500m grid.
+
+```{r}
+library(tidymv)
+
+# Read in COG GAM fit and COG point/range estimates
+mCOG <- readRDS("../COG/042022/mCOG.rds")
+cog <- readRDS("../COG/042022/cog_fit.rds")
+
+# Generate center of gravity plot with the 5 species estimates, estimate ranges, and fit with 95% CI
+
+cog_plot <- ggplot(data = cog, aes(x=Year, y=fit)) + 
+  geom_smooth_ci(species, show.legend = F) +
+  geom_pointrange(data = cog, aes(x=Year,y=est,ymin=lwr,ymax=upr,color=species, shape = species), size = 0.5, fatten = 2) +
+  theme_bw() +
+  ylab("Center of Gravity - Easting (km)") +
+  scale_color_discrete(name = "Species", labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad")) +
+  scale_shape_discrete(name = "Species", labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad")) +
+  theme(legend.position = "top") +
+  xlab("Year") +
+  scale_y_continuous(breaks = c(560,570,580,590,600,610))
+
+cog_plot
+
+# Generate COG plot of outflow spline
+
+cog_of <- plot_smooths(mCOG, series = outflow_maf, comparison = species) +
+  theme_bw() +
+  ylab("Center of Gravity - Easting (km)") +
+  xlab("Delta Outflow (maf)") +
+  theme(legend.position = "bottom") +
+  scale_linetype_discrete(name = "Species", 
+                          labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad")) +
+  scale_color_discrete(name = "Species", labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad")) +
+  scale_fill_discrete(name = "Species", labels = c("American Shad", "Delta Smelt", "Longfin Smelt", "Striped Bass", "Threadfin Shad"))
+
+cog_of
+
+# Combine plots
+cog_out <- ggarrange(cog_plot, cog_of, nrow = 2, ncol = 1)
+
+cog_out
+
+# Save figure
+ggsave("../Figures/051622/cog_outflow.png", plot = cog_out, height = 6, width = 7.5)
+```
+
+# Table 2
+Print model outputs
+
+```{r}
+library(sdmTMB)
+
+# Read in models
+mSTRBAS <- readRDS("../output_models/042022/mSTRBAS.rds")
+mDELSME <- readRDS("../output_models/042022/mDELSME.rds")
+mLONSME <- readRDS("../output_models/042022/mLONSME.rds")
+mTHRSHA <- readRDS("../output_models/042022/mTHRSHA.rds")
+mAMESHA <- readRDS("../output_models/042022/mAMESHA.rds")
+
+# Print model results
+summary(mSTRBAS)
+summary(mDELSME)
+summary(mLONSME)
+summary(mTHRSHA)
+summary(mAMESHA)
+```
+
+# Table 3
+
+Print results of simple GAM showing effect of year, species, and outflow on COG
+
+```{r}
+summary(mCOG)
+```
+
+# Appendix Figure 1
+
+```{r}
+# Filter out just 2017 since stations are the same each year
+SFES_2017 <- SFES %>%
+  filter(Year == 2017) 
+
+# Plot location of stations with color/shape by survey
+SFES_stations <- ggplot() +
+  geom_sf(data=SFE_polygon_ubersimple, colour = NA) +
+  coord_sf(xlim = c(535403, 653022), ylim = c(4139322, 4240550), expand = FALSE) + 
+  geom_point(data=SFES_2017,
+             aes(X*1000,Y*1000,colour=Survey,shape=Survey), 
+             width = 2, height = 2, 
+             position = position_dodge(width = 1500)) + 
+  scale_shape_manual(values=1:nlevels(SFES_2017$Survey), 
+                     labels = c("Bay Study Midwater Trawl",
+                                "Bay Study Otter Trawl",
+                                "Beach Seine Survey",
+                                "Chipps Island Trawl",
+                                "Fall Midwater Trawl",
+                                "Suisun Marsh Beach Seine",
+                                "Suisun Marsh Otter Trawl",
+                                "Summer Townet Survey")) +
+  scale_color_discrete(labels = c("Bay Study Midwater Trawl",
+                                "Bay Study Otter Trawl",
+                                "Beach Seine Survey",
+                                "Chipps Island Trawl",
+                                "Fall Midwater Trawl",
+                                "Suisun Marsh Beach Seine",
+                                "Suisun Marsh Otter Trawl",
+                                "Summer Townet Survey")) +
+  theme_classic2() +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  theme(legend.position = "top")
+  
+
+# Save plot
+ggsave("../Figures/051622/SFES_stations.png", SFES_stations, width = 9, height = 7)
+```
+
+  
